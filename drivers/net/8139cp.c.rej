@@ -1,0 +1,40 @@
+--- drivers/net/8139cp.c
++++ drivers/net/8139cp.c
+@@ -992,6 +992,11 @@
+ 	cpw8(Cmd, RxOn | TxOn);
+ }
+ 
++static void cp_enable_irq(struct cp_private *cp)
++{
++	cpw16_f(IntrMask, cp_intr_mask);
++}
++
+ static void cp_init_hw (struct cp_private *cp)
+ {
+ 	struct net_device *dev = cp->dev;
+@@ -1031,8 +1036,6 @@
+ 
+ 	cpw16(MultiIntr, 0);
+ 
+-	cpw16_f(IntrMask, cp_intr_mask);
+-
+ 	cpw8_f(Cfg9346, Cfg9346_Lock);
+ }
+ 
+@@ -1164,6 +1167,8 @@
+ 	if (rc)
+ 		goto err_out_hw;
+ 
++	cp_enable_irq(cp);
++
+ 	netif_carrier_off(dev);
+ 	mii_check_media(&cp->mii_if, netif_msg_link(cp), true);
+ 	netif_start_queue(dev);
+@@ -2052,6 +2057,7 @@
+ 	/* FIXME: sh*t may happen if the Rx ring buffer is depleted */
+ 	cp_init_rings_index (cp);
+ 	cp_init_hw (cp);
++	cp_enable_irq(cp);
+ 	netif_start_queue (dev);
+ 
+ 	spin_lock_irqsave (&cp->lock, flags);

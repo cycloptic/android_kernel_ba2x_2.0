@@ -1,0 +1,12 @@
+--- drivers/uwb/hwa-rc.c
++++ drivers/uwb/hwa-rc.c
+@@ -645,7 +645,8 @@
+ 		dev_err(dev, "NEEP: URB error %d\n", urb->status);
+ 	}
+ 	result = usb_submit_urb(urb, GFP_ATOMIC);
+-	if (result < 0) {
++	if (result < 0 && result != -ENODEV && result != -EPERM) {
++		/* ignoring unrecoverable errors */
+ 		dev_err(dev, "NEEP: Can't resubmit URB (%d) resetting device\n",
+ 			result);
+ 		goto error;

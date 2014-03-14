@@ -1,0 +1,11 @@
+--- drivers/spi/spi.c
++++ drivers/spi/spi.c
+@@ -318,7 +318,7 @@
+ 	}
+ 
+ 	spi->master = master;
+-	spi->dev.parent = dev;
++	spi->dev.parent = &master->dev;
+ 	spi->dev.bus = &spi_bus_type;
+ 	spi->dev.release = spidev_release;
+ 	device_initialize(&spi->dev);

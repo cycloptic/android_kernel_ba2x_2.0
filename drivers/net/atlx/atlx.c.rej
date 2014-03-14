@@ -1,0 +1,11 @@
+--- drivers/net/atlx/atlx.c
++++ drivers/net/atlx/atlx.c
+@@ -193,7 +193,7 @@
+ {
+ 	struct atlx_adapter *adapter = netdev_priv(netdev);
+ 	/* Do the reset outside of interrupt context */
+-	schedule_work(&adapter->tx_timeout_task);
++	schedule_work(&adapter->reset_dev_task);
+ }
+ 
+ /*

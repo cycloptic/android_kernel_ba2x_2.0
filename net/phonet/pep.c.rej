@@ -1,0 +1,12 @@
+--- net/phonet/pep.c
++++ net/phonet/pep.c
+@@ -1045,6 +1045,9 @@
+ 	int flags = msg->msg_flags;
+ 	int err, done;
+ 
++	if (len > USHRT_MAX)
++		return -EMSGSIZE;
++
+ 	if ((msg->msg_flags & ~(MSG_DONTWAIT|MSG_EOR|MSG_NOSIGNAL|
+ 				MSG_CMSG_COMPAT)) ||
+ 			!(msg->msg_flags & MSG_EOR))

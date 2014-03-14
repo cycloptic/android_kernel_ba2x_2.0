@@ -1,0 +1,10 @@
+--- drivers/media/rc/winbond-cir.c
++++ drivers/media/rc/winbond-cir.c
+@@ -1058,6 +1058,7 @@
+ 		goto exit_unregister_led;
+ 	}
+ 
++	data->dev->driver_type = RC_DRIVER_IR_RAW;
+ 	data->dev->driver_name = WBCIR_NAME;
+ 	data->dev->input_name = WBCIR_NAME;
+ 	data->dev->input_phys = "wbcir/cir0";

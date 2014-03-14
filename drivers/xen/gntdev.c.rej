@@ -1,0 +1,11 @@
+--- drivers/xen/gntdev.c
++++ drivers/xen/gntdev.c
+@@ -664,7 +664,7 @@
+ 	vma->vm_flags |= VM_RESERVED|VM_DONTEXPAND;
+ 
+ 	if (use_ptemod)
+-		vma->vm_flags |= VM_DONTCOPY|VM_PFNMAP;
++		vma->vm_flags |= VM_DONTCOPY;
+ 
+ 	vma->vm_private_data = map;
+ 

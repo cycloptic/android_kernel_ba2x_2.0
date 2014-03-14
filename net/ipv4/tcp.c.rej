@@ -1,0 +1,11 @@
+--- net/ipv4/tcp.c
++++ net/ipv4/tcp.c
+@@ -860,7 +860,7 @@
+ 	}
+ 
+ out:
+-	if (copied)
++	if (copied && !(flags & MSG_SENDPAGE_NOTLAST))
+ 		tcp_push(sk, flags, mss_now, tp->nonagle);
+ 	return copied;
+ 
