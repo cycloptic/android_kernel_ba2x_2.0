@@ -1,0 +1,27 @@
+--- fs/hfsplus/dir.c
++++ fs/hfsplus/dir.c
+@@ -146,6 +146,11 @@
+ 		filp->f_pos++;
+ 		/* fall through */
+ 	case 1:
++		if (fd.entrylength > sizeof(entry) || fd.entrylength < 0) {
++			err = -EIO;
++			goto out;
++		}
++
+ 		hfs_bnode_read(fd.bnode, &entry, fd.entryoffset,
+ 			fd.entrylength);
+ 		if (be16_to_cpu(entry.type) != HFSPLUS_FOLDER_THREAD) {
+@@ -177,6 +182,12 @@
+ 			err = -EIO;
+ 			goto out;
+ 		}
++
++		if (fd.entrylength > sizeof(entry) || fd.entrylength < 0) {
++			err = -EIO;
++			goto out;
++		}
++
+ 		hfs_bnode_read(fd.bnode, &entry, fd.entryoffset,
+ 			fd.entrylength);
+ 		type = be16_to_cpu(entry.type);

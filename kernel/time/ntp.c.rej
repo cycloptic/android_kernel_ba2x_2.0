@@ -1,0 +1,11 @@
+--- kernel/time/ntp.c
++++ kernel/time/ntp.c
+@@ -275,7 +275,7 @@
+ 
+ 	time_status |= STA_MODE;
+ 
+-	return div_s64(offset64 << (NTP_SCALE_SHIFT - SHIFT_FLL), secs);
++	return div64_long(offset64 << (NTP_SCALE_SHIFT - SHIFT_FLL), secs);
+ }
+ 
+ static void ntp_update_offset(long offset)

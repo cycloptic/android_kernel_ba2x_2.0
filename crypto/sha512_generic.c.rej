@@ -1,0 +1,11 @@
+--- crypto/sha512_generic.c
++++ crypto/sha512_generic.c
+@@ -174,7 +174,7 @@
+ 	index = sctx->count[0] & 0x7f;
+ 
+ 	/* Update number of bytes */
+-	if (!(sctx->count[0] += len))
++	if ((sctx->count[0] += len) < len)
+ 		sctx->count[1]++;
+ 
+         part_len = 128 - index;

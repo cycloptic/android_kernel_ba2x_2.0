@@ -1,0 +1,11 @@
+--- mm/nommu.c
++++ mm/nommu.c
+@@ -780,8 +780,6 @@
+ 
+ 	if (vma->vm_next)
+ 		vma->vm_next->vm_prev = vma->vm_prev;
+-
+-	vma->vm_mm = NULL;
+ }
+ 
+ /*

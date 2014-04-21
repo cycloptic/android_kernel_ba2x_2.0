@@ -1,0 +1,11 @@
+--- sound/pci/hda/hda_proc.c
++++ sound/pci/hda/hda_proc.c
+@@ -54,6 +54,8 @@
+ 		[AC_WID_BEEP] = "Beep Generator Widget",
+ 		[AC_WID_VENDOR] = "Vendor Defined Widget",
+ 	};
++	if (wid_value == -1)
++		return "UNKNOWN Widget";
+ 	wid_value &= 0xf;
+ 	if (names[wid_value])
+ 		return names[wid_value];

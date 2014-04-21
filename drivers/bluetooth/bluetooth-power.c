@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2010, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +27,7 @@ static int bluetooth_toggle_radio(void *data, bool blocked)
 {
 	int ret = 0;
 	int (*power_control)(int enable);
+
 	power_control = data;
 	if (previous != blocked)
 		ret = (*power_control)(!blocked);
@@ -119,7 +120,7 @@ static struct platform_driver bt_power_driver = {
 static int __init bluetooth_power_init(void)
 {
 	int ret;
-	pr_info("bluetooth_power_init\n");
+
 	ret = platform_driver_register(&bt_power_driver);
 	return ret;
 }

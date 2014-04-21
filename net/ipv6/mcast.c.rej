@@ -1,0 +1,11 @@
+--- net/ipv6/mcast.c
++++ net/ipv6/mcast.c
+@@ -2054,7 +2054,7 @@
+ 		if (!delta)
+ 			pmc->mca_sfcount[sfmode]--;
+ 		for (j=0; j<i; j++)
+-			(void) ip6_mc_del1_src(pmc, sfmode, &psfsrc[i]);
++			ip6_mc_del1_src(pmc, sfmode, &psfsrc[j]);
+ 	} else if (isexclude != (pmc->mca_sfcount[MCAST_EXCLUDE] != 0)) {
+ 		struct ip6_sf_list *psf;
+ 

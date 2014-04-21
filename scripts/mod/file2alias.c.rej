@@ -1,0 +1,13 @@
+--- scripts/mod/file2alias.c
++++ scripts/mod/file2alias.c
+@@ -905,6 +905,10 @@
+ 	if (!sym->st_shndx || get_secindex(info, sym) >= info->num_sections)
+ 		return;
+ 
++	/* We're looking for an object */
++	if (ELF_ST_TYPE(sym->st_info) != STT_OBJECT)
++		return;
++
+ 	/* Handle all-NULL symbols allocated into .bss */
+ 	if (info->sechdrs[get_secindex(info, sym)].sh_type & SHT_NOBITS) {
+ 		zeros = calloc(1, sym->st_size);

@@ -89,6 +89,7 @@ enum {
 	REG_NVM_CTRL = 0x3680,
 	REG_NVM_PDN = 0x3681,
 	REG_NVM_PULSE_WIDTH = 0x368B,
+	REG_TEST_PATTERN_MODE = 0x600
 };
 
 #define VB6801_LINES_PER_FRAME_PREVIEW   800
@@ -97,11 +98,14 @@ enum {
 #define VB6801_PIXELS_PER_LINE_SNAPSHOT 2500
 
 /* AF constant */
-#define VB6801_TOTAL_STEPS_NEAR_TO_FAR    25
-#define VB6801_STEPS_NEAR_TO_CLOSEST_INF  25
+#define VB6801_TOTAL_STEPS_NEAR_TO_FAR    30
+#define VB6801_STEPS_NEAR_TO_CLOSEST_INF  30
+#define VB6801_DAMPING_THRESHOLD          10
+#define VB6801_SW_DAMPING_FINE_STEP       10
+#define VB6801_SW_DAMPING_COARSE_STEP      4
 
 /* for 30 fps preview */
-#define VB6801_DEFAULT_CLOCK_RATE    12000000
+#define VB6801_DEFAULT_CLOCK_RATE    12250000
 
 enum vb6801_test_mode_t {
 	TEST_OFF,
@@ -218,30 +222,32 @@ struct i2c_client *vb6801_client;
 
 struct vb6801_ctrl_t {
 	const struct msm_camera_sensor_info *sensordata;
-
 	int sensormode;
 	uint32_t factor_fps;	/* init to 1 * 0x00000400 */
 	uint16_t curr_fps;
 	uint16_t max_fps;
 	int8_t pict_exp_update;
 	int8_t reducel;
+	uint16_t curr_step_pos;
 	uint16_t curr_lens_pos;
 	uint16_t init_curr_lens_pos;
 	enum vb6801_resolution_t prev_res;
 	enum vb6801_resolution_t pict_res;
 	enum vb6801_resolution_t curr_res;
 	enum vb6801_test_mode_t set_test;
-
 	struct vb6801_sensor_info s_info;
 	struct sensor_dynamic_params_t s_dynamic_params;
 };
 
+uint16_t vb6801_step_pos_tbl[VB6801_TOTAL_STEPS_NEAR_TO_FAR + 1];
+
 static struct vb6801_ctrl_t *vb6801_ctrl;
 static DECLARE_WAIT_QUEUE_HEAD(vb6801_wait_queue);
 DEFINE_MUTEX(vb6801_mut);
+static void vb6801_setup_af_tbl(void);
 
 static int vb6801_i2c_rxdata(unsigned short saddr,
-			     unsigned char *rxdata, int length)
+				unsigned char *rxdata, int length)
 {
 	struct i2c_msg msgs[] = {
 		{
@@ -253,7 +259,7 @@ static int vb6801_i2c_rxdata(unsigned short saddr,
 		{
 			.addr = saddr,
 			.flags = I2C_M_RD,
-			.len = 2,
+			.len = 2,/* length, */
 			.buf = rxdata,
 		},
 	};
@@ -267,7 +273,7 @@ static int vb6801_i2c_rxdata(unsigned short saddr,
 }
 
 static int32_t vb6801_i2c_read(unsigned short raddr,
-			       unsigned short *rdata, int rlen)
+				unsigned short *rdata, int rlen)
 {
 	int32_t rc = 0;
 	unsigned char buf[2];
@@ -293,18 +299,18 @@ static int32_t vb6801_i2c_read(unsigned short raddr,
 }
 
 static int32_t vb6801_i2c_read_table(struct vb6801_i2c_reg_conf_t *regs,
-				     int items)
+					int items)
 {
 	int i;
 	int32_t rc = -EFAULT;
 
 	for (i = 0; i < items; i++) {
 		unsigned short *buf =
-		    regs->dlen == D_LEN_BYTE ?
-		    (unsigned short *)&regs->bdata :
-		    (unsigned short *)&regs->wdata;
+			regs->dlen == D_LEN_BYTE ?
+			(unsigned short *)&regs->bdata :
+			(unsigned short *)&regs->wdata;
+ 
 		rc = vb6801_i2c_read(regs->waddr, buf, regs->dlen + 1);
-
 		if (rc < 0) {
 			CDBG("vb6801_i2c_read_table Failed!!!\n");
 			break;
@@ -329,7 +335,7 @@ static int32_t vb6801_i2c_txdata(unsigned short saddr,
 	};
 
 	if (i2c_transfer(vb6801_client->adapter, msg, 1) < 0) {
-		CDBG("vb6801_i2c_txdata faild 0x%x\n", vb6801_client->addr);
+		CDBG("vb6801_i2c_txdata failed 0x%x\n", vb6801_client->addr);
 		return -EIO;
 	}
 
@@ -346,12 +352,11 @@ static int32_t vb6801_i2c_write_b(unsigned short waddr, uint8_t bdata)
 	buf[1] = (waddr & 0x00FF);
 	buf[2] = bdata;
 
-	CDBG("i2c_write_b addr = %d, val = %d\n", waddr, bdata);
 	rc = vb6801_i2c_txdata(vb6801_client->addr, buf, 3);
 
 	if (rc < 0) {
 		CDBG("i2c_write_b failed, addr = 0x%x, val = 0x%x!\n",
-		     waddr, bdata);
+			waddr, bdata);
 	}
 
 	return rc;
@@ -368,28 +373,25 @@ static int32_t vb6801_i2c_write_w(unsigned short waddr, unsigned short wdata)
 	buf[2] = (wdata & 0xFF00) >> 8;
 	buf[3] = (wdata & 0x00FF);
 
-	CDBG("i2c_write_w addr = %d, val = %d, buf[2] = 0x%x, buf[3] = 0x%x\n",
-	     waddr, wdata, buf[2], buf[3]);
-
 	rc = vb6801_i2c_txdata(vb6801_client->addr, buf, 4);
 	if (rc < 0) {
 		CDBG("i2c_write_w failed, addr = 0x%x, val = 0x%x!\n",
-		     waddr, wdata);
+			 waddr, wdata);
 	}
 
 	return rc;
 }
 
 static int32_t vb6801_i2c_write_table(struct vb6801_i2c_reg_conf_t *regs,
-				      int items)
+					int items)
 {
 	int i;
 	int32_t rc = -EFAULT;
 
 	for (i = 0; i < items; i++) {
 		rc = ((regs->dlen == D_LEN_BYTE) ?
-		      vb6801_i2c_write_b(regs->waddr, regs->bdata) :
-		      vb6801_i2c_write_w(regs->waddr, regs->wdata));
+			   vb6801_i2c_write_b(regs->waddr, regs->bdata) :
+			   vb6801_i2c_write_w(regs->waddr, regs->wdata));
 
 		if (rc < 0) {
 			CDBG("vb6801_i2c_write_table Failed!!!\n");
@@ -402,13 +404,61 @@ static int32_t vb6801_i2c_write_table(struct vb6801_i2c_reg_conf_t *regs,
 	return rc;
 }
 
+static void vb6801_setup_af_tbl(void)
+{
+	int i;
+	uint16_t vb6801_nl_region_boundary1 = 2;
+	uint16_t vb6801_nl_region_boundary2 = 3;
+	uint16_t vb6801_nl_region_code_per_step1 = 15; 
+	uint16_t vb6801_nl_region_code_per_step2 = 7;
+	uint16_t vb6801_l_region_code_per_step = 4;
+
+	vb6801_step_pos_tbl[0] = 0;
+
+	if(vb6801_ctrl->s_info.vcm_dac_code_macro_up == 0){
+		for(i = 1; i <= VB6801_TOTAL_STEPS_NEAR_TO_FAR; i++){
+			if (i <= vb6801_nl_region_boundary1){
+				vb6801_step_pos_tbl[i] = vb6801_step_pos_tbl[i-1] +
+				vb6801_nl_region_code_per_step1;
+			}else if (i <= vb6801_nl_region_boundary2) 
+				vb6801_step_pos_tbl[i] = vb6801_step_pos_tbl[i-1] +
+				vb6801_nl_region_code_per_step2;
+			else
+				vb6801_step_pos_tbl[i] = vb6801_step_pos_tbl[i-1] +
+				vb6801_l_region_code_per_step;
+		}
+	}
+}
+
+static int32_t vb6801_test(enum vb6801_test_mode_t mo)
+{
+	int32_t rc = 0;
+
+	if (mo == TEST_OFF)
+		return 0;
+
+	rc = vb6801_i2c_write_w(REG_HOLD, HOLD);
+	if (rc < 0)
+		return rc;
+	else {
+		rc = vb6801_i2c_write_w(
+					 REG_TEST_PATTERN_MODE, (uint16_t) mo);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = vb6801_i2c_write_w(REG_HOLD, RELEASE_HOLD);
+
+	return rc;
+}
+
 static int32_t vb6801_reset(const struct msm_camera_sensor_info *data)
 {
 	int rc;
 
 	rc = gpio_request(data->sensor_reset, "vb6801");
 	if (!rc) {
-		CDBG("sensor_reset SUcceeded\n");
+		CDBG("Sensor_Reset Succeeded\n");
 		gpio_direction_output(data->sensor_reset, 0);
 		mdelay(50);
 		gpio_direction_output(data->sensor_reset, 1);
@@ -431,8 +481,8 @@ static int32_t vb6801_set_default_focus(void)
 static void vb6801_get_pict_fps(uint16_t fps, uint16_t *pfps)
 {
 	/* input fps is preview fps in Q8 format */
-	uint32_t divider; /*Q10 */
-	uint32_t pclk_mult; /*Q10 */
+	uint32_t divider;	/*Q10 */
+	uint32_t pclk_mult;	/*Q10 */
 	uint32_t d1;
 	uint32_t d2;
 
@@ -490,10 +540,10 @@ static uint32_t vb6801_get_pict_max_exp_lc(void)
 
 	if (vb6801_ctrl->pict_res == QTR_SIZE) {
 		snapshot_lines_per_frame =
-		    vb6801_ctrl->s_dynamic_params.preview_linesPerFrame - 3;
+		    	vb6801_ctrl->s_dynamic_params.preview_linesPerFrame - 3;
 	} else {
 		snapshot_lines_per_frame =
-		    vb6801_ctrl->s_dynamic_params.snapshot_linesPerFrame - 3;
+		    	vb6801_ctrl->s_dynamic_params.snapshot_linesPerFrame - 3;
 	}
 
 	return snapshot_lines_per_frame;
@@ -545,8 +595,8 @@ static int32_t vb6801_write_exp_gain(uint16_t gain, uint32_t line)
 		goto exp_gain_done;
 
 	if ((vb6801_ctrl->curr_fps <
-	     vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps) &&
-	    (!vb6801_ctrl->pict_exp_update)) {
+	     	 vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps) &&
+	    	(!vb6801_ctrl->pict_exp_update)) {
 
 		if (vb6801_ctrl->reducel) {
 
@@ -554,7 +604,7 @@ static int32_t vb6801_write_exp_gain(uint16_t gain, uint32_t line)
 						lpf * vb6801_ctrl->factor_fps);
 
 			vb6801_ctrl->curr_fps =
-			    vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps;
+			    	vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps;
 
 		} else if (!vb6801_ctrl->reducel) {
 
@@ -564,14 +614,14 @@ static int32_t vb6801_write_exp_gain(uint16_t gain, uint32_t line)
 			vb6801_ctrl->reducel = 1;
 		}
 	} else if ((vb6801_ctrl->curr_fps >
-		    vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps) &&
+		    	vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps) &&
 		   (!vb6801_ctrl->pict_exp_update)) {
 
 		rc = vb6801_i2c_write_w(REG_VT_FRAME_LENGTH_LINES,
 					lpf * vb6801_ctrl->factor_fps);
 
 		vb6801_ctrl->curr_fps =
-		    vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps;
+		    	vb6801_ctrl->max_fps / vb6801_ctrl->factor_fps;
 
 	} else {
 		/* analogue_gain_code_global */
@@ -585,7 +635,7 @@ static int32_t vb6801_write_exp_gain(uint16_t gain, uint32_t line)
 		if (rc < 0)
 			goto exp_gain_done;
 
-		vb6801_ctrl->pict_exp_update = 1;
+		vb6801_ctrl->pict_exp_update = 0;
 	}
 
 	rc = vb6801_i2c_write_w(REG_HOLD, RELEASE_HOLD);
@@ -610,7 +660,7 @@ static int32_t vb6801_power_down(void)
 }
 
 static int32_t vb6801_go_to_position(uint32_t target_vcm_dac_code,
-				     struct vb6801_sensor_info *ps)
+				     	struct vb6801_sensor_info *ps)
 {
 	/* Prior to running this function the following values must
 	 * be initialised in the sensor data structure, PS
@@ -635,24 +685,23 @@ static int32_t vb6801_go_to_position(uint32_t target_vcm_dac_code,
 	/* Generate a rising edge on the dac_strobe to latch
 	 * new DAC value */
 
-	rc = vb6801_i2c_write_w(REG_VCM_DAC_STROBE, 0x01);
+	rc = vb6801_i2c_write_b(REG_VCM_DAC_STROBE, 0x01);
 
 	return rc;
 }
 
 static int32_t vb6801_move_focus(int direction, int32_t num_steps)
 {
+	uint16_t vb6801_sw_damping_time_wait;
 	int16_t step_direction;
-	int16_t actual_step;
-	int16_t next_position;
-	uint32_t step_size;
-	int16_t small_move[4];
-	uint16_t i;
+	int16_t curr_lens_pos;
+	int16_t curr_step_pos;
+	int16_t dest_lens_pos;
+	int16_t dest_step_pos;
+	int16_t target_dist;
+	int16_t small_step;
+	int16_t next_lens_pos;
 	int32_t rc = 0;
-
-	step_size = (vb6801_ctrl->s_info.vcm_dac_code_macro_up -
-		     vb6801_ctrl->s_info.vcm_dac_code_infinity_dn) /
-	    VB6801_TOTAL_STEPS_NEAR_TO_FAR;
 
 	if (num_steps > VB6801_TOTAL_STEPS_NEAR_TO_FAR)
 		num_steps = VB6801_TOTAL_STEPS_NEAR_TO_FAR;
@@ -660,54 +709,97 @@ static int32_t vb6801_move_focus(int direction, int32_t num_steps)
 		return -EINVAL;
 
 	if (direction == MOVE_NEAR)
-		step_direction = 4;
+		step_direction = 1;
 	else if (direction == MOVE_FAR)
-		step_direction = -4;
+		step_direction = -1;
 	else
 		return -EINVAL;
 
 	/* need to decide about default position and power supplied
 	 * at start up and reset */
-	if (vb6801_ctrl->curr_lens_pos < vb6801_ctrl->init_curr_lens_pos)
-		vb6801_ctrl->curr_lens_pos = vb6801_ctrl->init_curr_lens_pos;
+	curr_lens_pos = vb6801_ctrl->curr_lens_pos;
+	curr_step_pos = vb6801_ctrl->curr_step_pos;
 
-	actual_step = (step_direction * num_steps);
+	if (curr_lens_pos < vb6801_ctrl->init_curr_lens_pos)
+		curr_lens_pos = vb6801_ctrl->init_curr_lens_pos;
 
-	next_position = vb6801_ctrl->curr_lens_pos;
+	dest_step_pos = curr_step_pos + (step_direction * num_steps);
 
-	for (i = 0; i < 4; i++) {
-		if (actual_step >= 0)
-			small_move[i] =
-			    (i + 1) * actual_step / 4 - i * actual_step / 4;
+	if (dest_step_pos < 0)
+		dest_step_pos = 0;
+	else if (dest_step_pos > VB6801_TOTAL_STEPS_NEAR_TO_FAR)
+		dest_step_pos = VB6801_TOTAL_STEPS_NEAR_TO_FAR;
 
-		if (actual_step < 0)
-			small_move[i] =
-			    (i + 1) * actual_step / 4 - i * actual_step / 4;
+	if (dest_step_pos == vb6801_ctrl->curr_step_pos)
+		return rc;
+
+	dest_lens_pos = vb6801_step_pos_tbl[dest_step_pos];
+	target_dist = step_direction * (dest_lens_pos - curr_lens_pos);
+
+	/* SW damping */
+	if ((step_direction < 0) && (target_dist >= vb6801_step_pos_tbl[VB6801_DAMPING_THRESHOLD])) {
+		small_step = (uint16_t)target_dist/VB6801_SW_DAMPING_FINE_STEP;
+		if ((target_dist % VB6801_SW_DAMPING_FINE_STEP) != 0)
+			small_step = small_step + 1;
+
+		vb6801_sw_damping_time_wait = 1;
+	} else {
+		small_step = (uint16_t)target_dist/VB6801_SW_DAMPING_COARSE_STEP;
+		if((target_dist % VB6801_SW_DAMPING_COARSE_STEP) != 0)
+			small_step = small_step + 1;
+
+		vb6801_sw_damping_time_wait = 4;
 	}
 
-	if (next_position > 511)
-		next_position = 511;
-	else if (next_position < 0)
-		next_position = 0;
+	for (next_lens_pos = curr_lens_pos + (step_direction * small_step);
+		(step_direction * next_lens_pos) <= (step_direction * dest_lens_pos);
+		 next_lens_pos += (step_direction * small_step)) {
+		rc = vb6801_go_to_position(next_lens_pos, &vb6801_ctrl->s_info);
+		if (rc < 0) {
+			CDBG("vb6801_go_to_position Failed in Move Focus!!!\n");
+			return rc;
+		} 
+		curr_lens_pos = next_lens_pos;
+		mdelay(vb6801_sw_damping_time_wait);
+	}
 
-	/* for damping */
-	for (i = 0; i < 4; i++) {
-		next_position =
-		    (int16_t) (vb6801_ctrl->curr_lens_pos + small_move[i]);
+	if(curr_lens_pos != dest_lens_pos) {
+		rc = vb6801_go_to_position(dest_lens_pos, &vb6801_ctrl->s_info);
+		if (rc < 0) {
+			CDBG("vb6801_go_to_position Failed in Move Focus!!!\n");
+			return rc;
+		}
+		mdelay(vb6801_sw_damping_time_wait);
+	}
 
-		/* Writing the digital code for current to the actuator */
-		CDBG("next_position in damping mode = %d\n", next_position);
+	vb6801_ctrl->curr_lens_pos = dest_lens_pos;
+	vb6801_ctrl->curr_step_pos = dest_step_pos;
 
-		rc = vb6801_go_to_position(next_position, &vb6801_ctrl->s_info);
+	return rc;
+}
+
+static int32_t vb6801_set_default_focus(void)
+{
+	int32_t rc = 0;
+
+	if (vb6801_ctrl->curr_step_pos != 0){
+		rc = vb6801_move_focus(MOVE_FAR, vb6801_ctrl->curr_step_pos);
+		if (rc < 0) {
+			CDBG("vb6801_set_default_focus Failed!!!\n");
+			return rc;
+		}
+	} else {
+		rc = vb6801_go_to_position(0, &vb6801_ctrl->s_info);
 		if (rc < 0) {
 			CDBG("go_to_position Failed!!!\n");
 			return rc;
 		}
 
-		vb6801_ctrl->curr_lens_pos = next_position;
-		if (i < 3)
-			mdelay(5);
 	}
+
+	vb6801_ctrl->curr_lens_pos = 0;
+	vb6801_ctrl->init_curr_lens_pos = 0;
+	vb6801_ctrl->curr_step_pos = 0;
 
 	return rc;
 }
@@ -886,6 +978,7 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	uint32_t coarse_integration_time = 1597;
 	uint32_t coarse_integration_time_max_margin = 3;
 	uint16_t frame_count;
+	int16_t step_pos = vb6801_ctrl->curr_step_pos;
 	int timeout;
 
 	struct vb6801_sensor_info *pinfo = &vb6801_ctrl->s_info;
@@ -952,10 +1045,10 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	 * as possible to the min allowed PLL input frequency.
 	 * This yields the smallest step size in the PLL output frequency. */
 	pre_pll_clk_div =
-	    ((int)(ext_clk_freq_mhz / min_pll_ip_freq_mhz) >> 1) << 1;
+	    	((int)(ext_clk_freq_mhz / min_pll_ip_freq_mhz) >> 1) << 1;
+
 	if (pre_pll_clk_div < 2)
 		pre_pll_clk_div = 1;
-
 	pll_ip_freq_mhz = ext_clk_freq_mhz / pre_pll_clk_div;
 
 	/* Video Timing System Clock divider: valid values 1, 2, 4
@@ -963,9 +1056,11 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	 * 1st pass estimates for vt_sys_clk_freq_mhz and then the PLL output
 	 * frequency.*/
 	vt_sys_clk_freq_mhz = vt_pix_clk_div * target_vt_pix_clk_freq_mhz;
+
 	vt_sys_clk_div = max_pll_op_freq_mhz / vt_sys_clk_freq_mhz;
-	if (vt_sys_clk_div < 2)
+	if ( vt_sys_clk_div < 2 )
 		vt_sys_clk_div = 1;
+
 
 	/* PLL Mulitplier: min , max 106 */
 	pll_op_freq_mhz = vt_sys_clk_div * vt_sys_clk_freq_mhz;
@@ -978,9 +1073,10 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 
 	/* Re-calculate video timing clock frequencies based
 	 * on actual PLL freq */
-	vt_sys_clk_freq_mhz = pll_op_freq_mhz / vt_sys_clk_div;
+	vt_sys_clk_freq_mhz = pll_op_freq_mhz     / vt_sys_clk_div;
+
 	vt_pix_clk_freq_mhz = ((vt_sys_clk_freq_mhz * 0x0001000) /
-				vt_pix_clk_div)/0x0001000;
+							vt_pix_clk_div)/0x0001000;
 
 	/* Output System Clock Divider: valid value 1, 2, 4, 6, 8
 	 * op_sys_clk_div = vt_sys_clk_div;*/
@@ -988,15 +1084,17 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	if (op_sys_clk_div < 2)
 		op_sys_clk_div = 1;
 
+
 	/* Calculate output timing clock frequencies */
-	op_sys_clk_freq_mhz = pll_op_freq_mhz / op_sys_clk_div;
+	op_sys_clk_freq_mhz = pll_op_freq_mhz / (op_sys_clk_div);
+
 	op_pix_clk_freq_mhz =
-	    (op_sys_clk_freq_mhz * 0x0001000) / (op_pix_clk_div * 0x0001000);
+		(op_sys_clk_freq_mhz * 0x0001000) / (op_pix_clk_div * 0x0001000);
 
 	/* Line length in pixels and us */
 	vt_line_length_pck = 2500;
 	vt_line_length_us =
-	    vt_line_length_pck * 0x0001000 / vt_pix_clk_freq_mhz;
+		vt_line_length_pck * 0x0001000 / vt_pix_clk_freq_mhz;
 
 	/* Target vt_frame_length_ms */
 	target_vt_frame_length_ms = (1000 * 0x0001000 / target_frame_rate_fps);
@@ -1006,7 +1104,7 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	    additional_rows + y_output_size + min_vt_frame_blanking_lines;
 
 	vt_frame_length_lines =
-	    ((1000 * target_vt_frame_length_ms) / vt_line_length_us);
+		((1000 * target_vt_frame_length_ms) / vt_line_length_us);
 
 	if (vt_frame_length_lines <= min_vt_frame_length_lines)
 		vt_frame_length_lines = min_vt_frame_length_lines;
@@ -1019,7 +1117,7 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 
 	/* Set coarse integration to max */
 	coarse_integration_time =
-	    vt_frame_length_lines - coarse_integration_time_max_margin;
+	    	vt_frame_length_lines - coarse_integration_time_max_margin;
 
 	CDBG("SENSOR VIDEO TIMING SUMMARY:\n");
 	CDBG(" ============================\n");
@@ -1047,10 +1145,18 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	CDBG("x_odd_inc = %d\n", x_odd_inc);
 	CDBG("y_odd_inc = %d\n", y_odd_inc);
 	CDBG("(vt_frame_length_lines * frame_rate_factor ) = %d\n",
-	    (vt_frame_length_lines * vb6801_ctrl->factor_fps));
+		  (vt_frame_length_lines * vb6801_ctrl->factor_fps));
 	CDBG("coarse_integration_time = %d\n", coarse_integration_time);
 	CDBG("pinfo->vcm_dac_code = %d\n", pinfo->vcm_dac_code);
 	CDBG("capture_mode = %d\n", capture_mode);
+
+	/* move lens to default position before stop stream, 
+	it will be restore after streaming resume */
+	rc = vb6801_set_default_focus();
+	if (rc < 0) {
+		CDBG("vb6801_set_default_focus FAILED!!!\n");
+		return rc;
+	}
 
 	/* RE-CONFIGURE SENSOR WITH NEW TIMINGS
 	 * ====================================
@@ -1081,6 +1187,7 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 			 D_LEN_WORD},
 			{REG_ANALOGUE_GAIN_CODE_GLOBAL, 128, 0, D_LEN_WORD},
 			{REG_PRE_PLL_CLK_DIV, pre_pll_clk_div, 0, D_LEN_WORD},
+			{REG_PLL_MULTIPLIER, pll_multiplier/0x0001000, 0, D_LEN_WORD},
 			{REG_VT_SYS_CLK_DIV, vt_sys_clk_div, 0, D_LEN_WORD},
 			{REG_VT_PIX_CLK_DIV, vt_pix_clk_div, 0, D_LEN_WORD},
 			{REG_OP_SYS_CLK_DIV, vt_sys_clk_div, 0, D_LEN_WORD},
@@ -1142,6 +1249,12 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 		return rc;
 	}
 
+	rc = vb6801_move_focus(MOVE_NEAR, step_pos);
+	if (rc < 0) {
+		CDBG("vb6801_move_focus FAILED in config_sensor!!!\n");
+		return rc;
+	}
+
 	/* Wait until the sensor starts streaming
 	 * Poll until the reported frame_count value is != 0xFF */
 	frame_count = 0xFF;
@@ -1197,13 +1310,15 @@ static int vb6801_config_sensor(int32_t ext_clk_freq_mhz,
 	rc = vb6801_i2c_read(REG_FRAME_COUNT, &frame_count, 1);
 	CDBG("REG_FRAME_COUNT4  = 0x%x\n", frame_count);
 
+     rc = vb6801_test(vb6801_ctrl->set_test);
+
 	return rc;
 }
 
 static int vb6801_sensor_init_done(const struct msm_camera_sensor_info *data)
 {
 	gpio_direction_output(data->sensor_reset, 0);
-	gpio_free(data->sensor_reset);
+	//gpio_free(data->sensor_reset);
 	return 0;
 }
 
@@ -1256,7 +1371,7 @@ static int32_t vb6801_snapshot_config(int mode, int res)
 	if (rc < 0)
 		return rc;
 
-	rc = vb6801_i2c_read(REG_VT_LINE_LENGTH_PCK,
+	rc = vb6801_i2c_read(REG_VT_FRAME_LENGTH_LINES,
 			     &vb6801_ctrl->s_dynamic_params.
 			     snapshot_linesPerFrame, 2);
 
@@ -1301,7 +1416,7 @@ int vb6801_sensor_config(void __user *argp)
 	switch (cdata.cfgtype) {
 	case CFG_GET_PICT_FPS:
 		vb6801_get_pict_fps(cdata.cfg.gfps.prevfps,
-				    &(cdata.cfg.gfps.pictfps));
+				    	&(cdata.cfg.gfps.pictfps));
 
 		if (copy_to_user((void *)argp,
 				 &cdata, sizeof(struct sensor_cfg_data)))
@@ -1360,7 +1475,7 @@ int vb6801_sensor_config(void __user *argp)
 
 	case CFG_SET_PICT_EXP_GAIN:
 		rc = vb6801_set_pict_exp_gain(cdata.cfg.exp_gain.gain,
-					      cdata.cfg.exp_gain.line);
+					      		cdata.cfg.exp_gain.line);
 		break;
 
 	case CFG_SET_MODE:
@@ -1373,7 +1488,7 @@ int vb6801_sensor_config(void __user *argp)
 
 	case CFG_MOVE_FOCUS:
 		rc = vb6801_move_focus(cdata.cfg.focus.dir,
-				       cdata.cfg.focus.steps);
+				       		cdata.cfg.focus.steps);
 		break;
 
 	case CFG_SET_DEFAULT_FOCUS:
@@ -1405,7 +1520,7 @@ static int vb6801_sensor_release(void)
 }
 
 static int vb6801_i2c_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+			    	const struct i2c_device_id *id)
 {
 	int rc = 0;
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -1454,8 +1569,8 @@ static struct i2c_driver vb6801_i2c_driver = {
 	.probe = vb6801_i2c_probe,
 	.remove = __exit_p(vb6801_i2c_remove),
 	.driver = {
-		   .name = "vb6801",
-		   },
+		.name = "vb6801",
+	},
 };
 
 static int vb6801_probe_init_sensor(const struct msm_camera_sensor_info *data)
@@ -1471,7 +1586,7 @@ static int vb6801_probe_init_sensor(const struct msm_camera_sensor_info *data)
 	if (rc < 0)
 		goto init_probe_done;
 
-	mdelay(20);
+	mdelay(50);
 
 	rc = vb6801_i2c_read_table(rreg, ARRAY_SIZE(rreg));
 	if (rc < 0) {
@@ -1512,19 +1627,20 @@ int vb6801_sensor_open_init(const struct msm_camera_sensor_info *data)
 	vb6801_ctrl->max_fps = 7680; /* 30 * Q8 */ ;
 	vb6801_ctrl->pict_exp_update = 0; /* 30 * Q8 */ ;
 	vb6801_ctrl->reducel = 0; /* 30 * Q8 */ ;
+	vb6801_ctrl->curr_step_pos = 0;
 
 	vb6801_ctrl->set_test = TEST_OFF;
 	vb6801_ctrl->prev_res = QTR_SIZE;
 	vb6801_ctrl->pict_res = FULL_SIZE;
 
 	vb6801_ctrl->s_dynamic_params.preview_linesPerFrame =
-	    VB6801_LINES_PER_FRAME_PREVIEW;
+	    	VB6801_LINES_PER_FRAME_PREVIEW;
 	vb6801_ctrl->s_dynamic_params.preview_pixelsPerLine =
-	    VB6801_PIXELS_PER_LINE_PREVIEW;
+	    	VB6801_PIXELS_PER_LINE_PREVIEW;
 	vb6801_ctrl->s_dynamic_params.snapshot_linesPerFrame =
-	    VB6801_LINES_PER_FRAME_SNAPSHOT;
+	    	VB6801_LINES_PER_FRAME_SNAPSHOT;
 	vb6801_ctrl->s_dynamic_params.snapshot_pixelsPerLine =
-	    VB6801_PIXELS_PER_LINE_SNAPSHOT;
+	    	VB6801_PIXELS_PER_LINE_SNAPSHOT;
 
 	if (data)
 		vb6801_ctrl->sensordata = data;
@@ -1550,6 +1666,9 @@ int vb6801_sensor_open_init(const struct msm_camera_sensor_info *data)
 	}
 	mdelay(66);
 
+	/* set up lens position talbe */
+	vb6801_setup_af_tbl();
+
 	rc = vb6801_config_sensor(12, 30, 60, 2, 1, 10, 2, RES_PREVIEW);
 	if (rc < 0)
 		goto open_init_fail2;
@@ -1565,7 +1684,7 @@ open_init_done:
 }
 
 static int vb6801_sensor_probe(const struct msm_camera_sensor_info *info,
-			       struct msm_sensor_ctrl *s)
+				       struct msm_sensor_ctrl *s)
 {
 	int rc = i2c_add_driver(&vb6801_i2c_driver);
 	if (rc < 0 || vb6801_client == NULL) {
@@ -1575,7 +1694,7 @@ static int vb6801_sensor_probe(const struct msm_camera_sensor_info *info,
 
 	/* enable mclk first */
 	msm_camio_clk_rate_set(VB6801_DEFAULT_CLOCK_RATE);
-	mdelay(20);
+	mdelay(50);
 
 	rc = vb6801_probe_init_sensor(info);
 	if (rc < 0)
@@ -1599,9 +1718,9 @@ static int __vb6801_probe(struct platform_device *pdev)
 static struct platform_driver msm_camera_driver = {
 	.probe = __vb6801_probe,
 	.driver = {
-		   .name = "msm_camera_vb6801",
-		   .owner = THIS_MODULE,
-		   },
+		.name = "msm_camera_vb6801",
+		.owner = THIS_MODULE,
+	},
 };
 
 static int __init vb6801_init(void)

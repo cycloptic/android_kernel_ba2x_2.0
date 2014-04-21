@@ -1,0 +1,26 @@
+--- net/ipv6/ah6.c
++++ net/ipv6/ah6.c
+@@ -324,8 +324,6 @@
+ #endif
+ 	}
+ 
+-	err = ah->nexthdr;
+-
+ 	kfree(AH_SKB_CB(skb)->tmp);
+ 	xfrm_output_resume(skb, err);
+ }
+@@ -466,12 +464,12 @@
+ 	if (err)
+ 		goto out;
+ 
++	err = ah->nexthdr;
++
+ 	skb->network_header += ah_hlen;
+ 	memcpy(skb_network_header(skb), work_iph, hdr_len);
+ 	__skb_pull(skb, ah_hlen + hdr_len);
+ 	skb_set_transport_header(skb, -hdr_len);
+-
+-	err = ah->nexthdr;
+ out:
+ 	kfree(AH_SKB_CB(skb)->tmp);
+ 	xfrm_input_resume(skb, err);

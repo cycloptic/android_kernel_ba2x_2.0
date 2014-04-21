@@ -1,0 +1,13 @@
+--- net/ipv6/tcp_ipv6.c
++++ net/ipv6/tcp_ipv6.c
+@@ -1514,6 +1514,10 @@
+ 	tcp_mtup_init(newsk);
+ 	tcp_sync_mss(newsk, dst_mtu(dst));
+ 	newtp->advmss = dst_metric_advmss(dst);
++	if (tcp_sk(sk)->rx_opt.user_mss &&
++	    tcp_sk(sk)->rx_opt.user_mss < newtp->advmss)
++		newtp->advmss = tcp_sk(sk)->rx_opt.user_mss;
++
+ 	tcp_initialize_rcv_mss(newsk);
+ 
+ 	newinet->inet_daddr = newinet->inet_saddr = LOOPBACK4_IPV6;

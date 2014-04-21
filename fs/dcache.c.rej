@@ -1,0 +1,19 @@
+--- fs/dcache.c
++++ fs/dcache.c
+@@ -2433,6 +2433,7 @@
+ 			if (d_ancestor(alias, dentry)) {
+ 				/* Check for loops */
+ 				actual = ERR_PTR(-ELOOP);
++				spin_unlock(&inode->i_lock);
+ 			} else if (IS_ROOT(alias)) {
+ 				/* Is this an anonymous mountpoint that we
+ 				 * could splice into our tree? */
+@@ -2442,7 +2443,7 @@
+ 				goto found;
+ 			} else {
+ 				/* Nope, but we must(!) avoid directory
+-				 * aliasing */
++				 * aliasing. This drops inode->i_lock */
+ 				actual = __d_unalias(inode, dentry, alias);
+ 			}
+ 			write_sequnlock(&rename_lock);

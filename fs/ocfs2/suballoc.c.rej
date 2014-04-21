@@ -1,0 +1,20 @@
+--- fs/ocfs2/suballoc.c
++++ fs/ocfs2/suballoc.c
+@@ -600,7 +600,7 @@
+ 		ret = ocfs2_free_clusters(handle, cluster_ac->ac_inode,
+ 					  cluster_ac->ac_bh,
+ 					  le64_to_cpu(rec->e_blkno),
+-					  le32_to_cpu(rec->e_leaf_clusters));
++					  le16_to_cpu(rec->e_leaf_clusters));
+ 		if (ret)
+ 			mlog_errno(ret);
+ 		/* Try all the clusters to free */
+@@ -1628,7 +1628,7 @@
+ {
+ 	unsigned int bpc = le16_to_cpu(cl->cl_bpc);
+ 	unsigned int bitoff = le32_to_cpu(rec->e_cpos) * bpc;
+-	unsigned int bitcount = le32_to_cpu(rec->e_leaf_clusters) * bpc;
++	unsigned int bitcount = le16_to_cpu(rec->e_leaf_clusters) * bpc;
+ 
+ 	if (res->sr_bit_offset < bitoff)
+ 		return 0;

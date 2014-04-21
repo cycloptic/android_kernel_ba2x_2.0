@@ -1,0 +1,8 @@
+--- arch/sparc/kernel/ds.c
++++ arch/sparc/kernel/ds.c
+@@ -1269,4 +1269,4 @@
+ 	return vio_register_driver(&ds_driver);
+ }
+ 
+-subsys_initcall(ds_init);
++fs_initcall(ds_init);

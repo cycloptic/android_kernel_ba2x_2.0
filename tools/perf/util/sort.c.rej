@@ -1,0 +1,12 @@
+--- tools/perf/util/sort.c
++++ tools/perf/util/sort.c
+@@ -122,6 +122,9 @@
+ 		}
+ 	}
+ 	va_end(ap);
++
++	if (n >= (int)size)
++		return size - 1;
+ 	return n;
+ }
+ 

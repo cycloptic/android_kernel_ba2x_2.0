@@ -1,0 +1,28 @@
+--- include/linux/regset.h
++++ include/linux/regset.h
+@@ -335,8 +335,11 @@
+ {
+ 	const struct user_regset *regset = &view->regsets[setno];
+ 
++	if (!regset->get)
++		return -EOPNOTSUPP;
++
+ 	if (!access_ok(VERIFY_WRITE, data, size))
+-		return -EIO;
++		return -EFAULT;
+ 
+ 	return regset->get(target, regset, offset, size, NULL, data);
+ }
+@@ -358,8 +361,11 @@
+ {
+ 	const struct user_regset *regset = &view->regsets[setno];
+ 
++	if (!regset->set)
++		return -EOPNOTSUPP;
++
+ 	if (!access_ok(VERIFY_READ, data, size))
+-		return -EIO;
++		return -EFAULT;
+ 
+ 	return regset->set(target, regset, offset, size, NULL, data);
+ }

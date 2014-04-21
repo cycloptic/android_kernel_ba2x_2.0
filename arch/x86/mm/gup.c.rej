@@ -1,0 +1,11 @@
+--- arch/x86/mm/gup.c
++++ arch/x86/mm/gup.c
+@@ -201,6 +201,8 @@
+ 	do {
+ 		VM_BUG_ON(compound_head(page) != head);
+ 		pages[*nr] = page;
++		if (PageTail(page))
++			get_huge_page_tail(page);
+ 		(*nr)++;
+ 		page++;
+ 		refs++;

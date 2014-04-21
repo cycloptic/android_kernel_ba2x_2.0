@@ -1,0 +1,19 @@
+--- fs/autofs4/dev-ioctl.c
++++ fs/autofs4/dev-ioctl.c
+@@ -376,7 +376,7 @@
+ 			err = -EBADF;
+ 			goto out;
+ 		}
+-		if (!pipe->f_op || !pipe->f_op->write) {
++		if (autofs_prepare_pipe(pipe) < 0) {
+ 			err = -EPIPE;
+ 			fput(pipe);
+ 			goto out;
+@@ -385,7 +385,6 @@
+ 		sbi->pipefd = pipefd;
+ 		sbi->pipe = pipe;
+ 		sbi->catatonic = 0;
+-		sbi->compat_daemon = is_compat_task();
+ 	}
+ out:
+ 	mutex_unlock(&sbi->wq_mutex);

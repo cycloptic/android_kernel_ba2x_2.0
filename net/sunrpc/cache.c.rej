@@ -1,0 +1,11 @@
+--- net/sunrpc/cache.c
++++ net/sunrpc/cache.c
+@@ -828,6 +828,8 @@
+ {
+ 	ssize_t ret;
+ 
++	if (count == 0)
++		return -EINVAL;
+ 	if (copy_from_user(kaddr, buf, count))
+ 		return -EFAULT;
+ 	kaddr[count] = '\0';

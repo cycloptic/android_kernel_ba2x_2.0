@@ -1,0 +1,11 @@
+--- kernel/cred.c
++++ kernel/cred.c
+@@ -385,6 +385,8 @@
+ 	struct cred *new;
+ 	int ret;
+ 
++	p->replacement_session_keyring = NULL;
++
+ 	if (
+ #ifdef CONFIG_KEYS
+ 		!p->cred->thread_keyring &&

@@ -1,0 +1,11 @@
+--- net/mac80211/wpa.c
++++ net/mac80211/wpa.c
+@@ -109,7 +109,7 @@
+ 		if (status->flag & RX_FLAG_MMIC_ERROR)
+ 			goto mic_fail;
+ 
+-		if (!(status->flag & RX_FLAG_IV_STRIPPED))
++		if (!(status->flag & RX_FLAG_IV_STRIPPED) && rx->key)
+ 			goto update_iv;
+ 
+ 		return RX_CONTINUE;

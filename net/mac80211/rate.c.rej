@@ -1,0 +1,11 @@
+--- net/mac80211/rate.c
++++ net/mac80211/rate.c
+@@ -314,7 +314,7 @@
+ 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
+ 		info->control.rates[i].idx = -1;
+ 		info->control.rates[i].flags = 0;
+-		info->control.rates[i].count = 1;
++		info->control.rates[i].count = 0;
+ 	}
+ 
+ 	if (sdata->local->hw.flags & IEEE80211_HW_HAS_RATE_CONTROL)

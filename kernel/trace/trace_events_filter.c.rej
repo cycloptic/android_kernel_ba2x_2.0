@@ -1,0 +1,29 @@
+--- kernel/trace/trace_events_filter.c
++++ kernel/trace/trace_events_filter.c
+@@ -1766,7 +1766,7 @@
+ 		 * replace the filter for the call.
+ 		 */
+ 		filter = call->filter;
+-		call->filter = filter_item->filter;
++		rcu_assign_pointer(call->filter, filter_item->filter);
+ 		filter_item->filter = filter;
+ 
+ 		fail = false;
+@@ -1821,7 +1821,7 @@
+ 		filter = call->filter;
+ 		if (!filter)
+ 			goto out_unlock;
+-		call->filter = NULL;
++		RCU_INIT_POINTER(call->filter, NULL);
+ 		/* Make sure the filter is not being used */
+ 		synchronize_sched();
+ 		__free_filter(filter);
+@@ -1862,7 +1862,7 @@
+ 	 * string
+ 	 */
+ 	tmp = call->filter;
+-	call->filter = filter;
++	rcu_assign_pointer(call->filter, filter);
+ 	if (tmp) {
+ 		/* Make sure the call is done with the filter */
+ 		synchronize_sched();

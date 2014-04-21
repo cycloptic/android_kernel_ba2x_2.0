@@ -1,0 +1,50 @@
+--- mm/huge_memory.c
++++ mm/huge_memory.c
+@@ -641,6 +641,7 @@
+ 		set_pmd_at(mm, haddr, pmd, entry);
+ 		prepare_pmd_huge_pte(pgtable, mm);
+ 		add_mm_counter(mm, MM_ANONPAGES, HPAGE_PMD_NR);
++		mm->nr_ptes++;
+ 		spin_unlock(&mm->page_table_lock);
+ 	}
+ 
+@@ -759,6 +760,7 @@
+ 	pmd = pmd_mkold(pmd_wrprotect(pmd));
+ 	set_pmd_at(dst_mm, addr, dst_pmd, pmd);
+ 	prepare_pmd_huge_pte(pgtable, dst_mm);
++	dst_mm->nr_ptes++;
+ 
+ 	ret = 0;
+ out_unlock:
+@@ -857,7 +859,6 @@
+ 	}
+ 	kfree(pages);
+ 
+-	mm->nr_ptes++;
+ 	smp_wmb(); /* make pte visible before pmd */
+ 	pmd_populate(mm, pmd, pgtable);
+ 	page_remove_rmap(page);
+@@ -1016,6 +1017,7 @@
+ 			VM_BUG_ON(page_mapcount(page) < 0);
+ 			add_mm_counter(tlb->mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+ 			VM_BUG_ON(!PageHead(page));
++			tlb->mm->nr_ptes--;
+ 			spin_unlock(&tlb->mm->page_table_lock);
+ 			tlb_remove_page(tlb, page);
+ 			pte_free(tlb->mm, pgtable);
+@@ -1310,7 +1312,6 @@
+ 			pte_unmap(pte);
+ 		}
+ 
+-		mm->nr_ptes++;
+ 		smp_wmb(); /* make pte visible before pmd */
+ 		/*
+ 		 * Up to this point the pmd is present and huge and
+@@ -1925,7 +1926,6 @@
+ 	set_pmd_at(mm, address, pmd, _pmd);
+ 	update_mmu_cache(vma, address, entry);
+ 	prepare_pmd_huge_pte(pgtable, mm);
+-	mm->nr_ptes--;
+ 	spin_unlock(&mm->page_table_lock);
+ 
+ #ifndef CONFIG_NUMA

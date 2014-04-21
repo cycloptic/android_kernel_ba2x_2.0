@@ -1,0 +1,31 @@
+--- kernel/power/hibernate.c
++++ kernel/power/hibernate.c
+@@ -623,7 +623,7 @@
+ 	/* Allocate memory management structures */
+ 	error = create_basic_memory_bitmaps();
+ 	if (error)
+-		goto Exit;
++		goto Enable_umh;
+ 
+ 	printk(KERN_INFO "PM: Syncing filesystems ... ");
+ 	sys_sync();
+@@ -631,7 +631,7 @@
+ 
+ 	error = prepare_processes();
+ 	if (error)
+-		goto Finish;
++		goto Free_bitmaps;
+ 
+ 	if (hibernation_test(TEST_FREEZER))
+ 		goto Thaw;
+@@ -663,8 +663,9 @@
+ 
+  Thaw:
+ 	thaw_processes();
+- Finish:
++ Free_bitmaps:
+ 	free_basic_memory_bitmaps();
++ Enable_umh:
+ 	usermodehelper_enable();
+  Exit:
+ 	pm_notifier_call_chain(PM_POST_HIBERNATION);

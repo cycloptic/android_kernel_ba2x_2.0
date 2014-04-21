@@ -1,0 +1,10 @@
+--- include/net/arp.h
++++ include/net/arp.h
+@@ -16,6 +16,7 @@
+ 			 const unsigned char *dest_hw,
+ 			 const unsigned char *src_hw, const unsigned char *th);
+ extern int	arp_bind_neighbour(struct dst_entry *dst);
++extern struct neighbour *__arp_bind_neighbour(struct dst_entry *dst, __be32 nexthop);
+ extern int	arp_mc_map(__be32 addr, u8 *haddr, struct net_device *dev, int dir);
+ extern void	arp_ifdown(struct net_device *dev);
+ 

@@ -1,0 +1,10 @@
+--- include/net/netns/generic.h
++++ include/net/netns/generic.h
+@@ -41,6 +41,7 @@
+ 	ptr = ng->ptr[id - 1];
+ 	rcu_read_unlock();
+ 
++	BUG_ON(!ptr);
+ 	return ptr;
+ }
+ #endif

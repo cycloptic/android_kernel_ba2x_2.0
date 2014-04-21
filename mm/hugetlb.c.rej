@@ -1,0 +1,18 @@
+--- mm/hugetlb.c
++++ mm/hugetlb.c
+@@ -2679,6 +2679,7 @@
+ 	 * so no worry about deadlock.
+ 	 */
+ 	page = pte_page(entry);
++	get_page(page);
+ 	if (page != pagecache_page)
+ 		lock_page(page);
+ 
+@@ -2710,6 +2711,7 @@
+ 	}
+ 	if (page != pagecache_page)
+ 		unlock_page(page);
++	put_page(page);
+ 
+ out_mutex:
+ 	mutex_unlock(&hugetlb_instantiation_mutex);

@@ -1,0 +1,20 @@
+--- mm/memcontrol.c
++++ mm/memcontrol.c
+@@ -5290,6 +5290,8 @@
+ 	spinlock_t *ptl;
+ 
+ 	split_huge_page_pmd(walk->mm, pmd);
++	if (pmd_trans_unstable(pmd))
++		return 0;
+ 
+ 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+ 	for (; addr != end; pte++, addr += PAGE_SIZE)
+@@ -5451,6 +5453,8 @@
+ 	spinlock_t *ptl;
+ 
+ 	split_huge_page_pmd(walk->mm, pmd);
++	if (pmd_trans_unstable(pmd))
++		return 0;
+ retry:
+ 	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+ 	for (; addr != end; addr += PAGE_SIZE) {

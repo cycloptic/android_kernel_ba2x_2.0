@@ -1,0 +1,13 @@
+--- tools/perf/util/hist.c
++++ tools/perf/util/hist.c
+@@ -165,8 +165,8 @@
+ 			 * mis-adjust symbol addresses when computing
+ 			 * the history counter to increment.
+ 			 */
+-			if (he->ms.map != entry->ms.map) {
+-				he->ms.map = entry->ms.map;
++			if (he->ms.map != entry.ms.map) {
++				he->ms.map = entry.ms.map;
+ 				if (he->ms.map)
+ 					he->ms.map->referenced = true;
+ 			}

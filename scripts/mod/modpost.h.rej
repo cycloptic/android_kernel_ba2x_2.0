@@ -1,0 +1,10 @@
+--- scripts/mod/modpost.h
++++ scripts/mod/modpost.h
+@@ -113,6 +113,7 @@
+ 	int has_cleanup;
+ 	struct buffer dev_table_buf;
+ 	char	     srcversion[25];
++	int is_dot_o;
+ };
+ 
+ struct elf_info {

@@ -1,0 +1,10 @@
+--- fs/nilfs2/the_nilfs.c
++++ fs/nilfs2/the_nilfs.c
+@@ -515,6 +515,7 @@
+ 		brelse(sbh[1]);
+ 		sbh[1] = NULL;
+ 		sbp[1] = NULL;
++		valid[1] = 0;
+ 		swp = 0;
+ 	}
+ 	if (!valid[swp]) {

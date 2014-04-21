@@ -1,4 +1,4 @@
-NOTE: This source is preset to 1209MHz; if you would like a defferent frequency you must uncomment a predefined frequency in arch/arm/mach-msm/acpuclock-7201.c
+NOTE: This source is preset to 1152MHz; if you would like a defferent frequency you must uncomment a predefined frequency in arch/arm/mach-msm/acpuclock-7201.c
 
 	Linux kernel release 3.x <http://kernel.org/>
 

@@ -1,0 +1,19 @@
+--- fs/cifs/connect.c
++++ fs/cifs/connect.c
+@@ -3004,7 +3004,7 @@
+ int
+ cifs_mount(struct cifs_sb_info *cifs_sb, struct smb_vol *volume_info)
+ {
+-	int rc = 0;
++	int rc;
+ 	int xid;
+ 	struct cifs_ses *pSesInfo;
+ 	struct cifs_tcon *tcon;
+@@ -3033,6 +3033,7 @@
+ 		FreeXid(xid);
+ 	}
+ #endif
++	rc = 0;
+ 	tcon = NULL;
+ 	pSesInfo = NULL;
+ 	srvTcp = NULL;

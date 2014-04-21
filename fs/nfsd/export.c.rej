@@ -1,0 +1,11 @@
+--- fs/nfsd/export.c
++++ fs/nfsd/export.c
+@@ -88,7 +88,7 @@
+ 	struct svc_expkey key;
+ 	struct svc_expkey *ek = NULL;
+ 
+-	if (mesg[mlen-1] != '\n')
++	if (mlen < 1 || mesg[mlen-1] != '\n')
+ 		return -EINVAL;
+ 	mesg[mlen-1] = 0;
+ 

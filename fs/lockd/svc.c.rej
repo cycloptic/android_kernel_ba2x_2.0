@@ -1,0 +1,11 @@
+--- fs/lockd/svc.c
++++ fs/lockd/svc.c
+@@ -440,7 +440,7 @@
+ 	__typeof__(type) num = which_strtol(val, &endp, 0);		\
+ 	if (endp == val || *endp || num < (min) || num > (max))		\
+ 		return -EINVAL;						\
+-	*((int *) kp->arg) = num;					\
++	*((type *) kp->arg) = num;					\
+ 	return 0;							\
+ }
+ 

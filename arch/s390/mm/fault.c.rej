@@ -1,0 +1,10 @@
+--- arch/s390/mm/fault.c
++++ arch/s390/mm/fault.c
+@@ -36,7 +36,6 @@
+ #include <asm/pgtable.h>
+ #include <asm/irq.h>
+ #include <asm/mmu_context.h>
+-#include <asm/compat.h>
+ #include "../kernel/entry.h"
+ 
+ #ifndef CONFIG_64BIT
